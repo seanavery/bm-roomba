@@ -13,15 +13,23 @@ from viam.resource.types import Model, ModelFamily
 
 Device.pin_factory = LGPIOFactory()
 
+# L298N pin assignments (BCM)
+LEFT_FORWARD  = 26
+LEFT_BACKWARD = 13
+LEFT_ENABLE   = 19
+RIGHT_FORWARD  = 16
+RIGHT_BACKWARD = 20
+RIGHT_ENABLE   = 21
+
 
 class RoombaPiBase(Base):
     MODEL: ClassVar[Model] = Model(ModelFamily("sean", "roomba-pi"), "base")
 
-    # --- defaults ---
-    DEFAULT_WIDTH_MM: int = 235
+    # Config defaults
+    DEFAULT_WIDTH_MM: int             = 235
     DEFAULT_WHEEL_CIRCUMFERENCE_MM: int = 220
-    DEFAULT_MAX_SPEED_MM_S: float = 1341.0  # 3 mph
-    DEFAULT_MAX_SPIN_DEG_S: float = 180.0   # tunable — spinning has more friction than driving straight
+    DEFAULT_MAX_SPEED_MM_S: float     = 1341.0  # 3 mph
+    DEFAULT_MAX_SPIN_DEG_S: float     = 180.0   # lower than linear — spinning has more friction
 
     @classmethod
     def new(
@@ -42,38 +50,21 @@ class RoombaPiBase(Base):
         config: ComponentConfig,
         dependencies: Mapping[ResourceName, ResourceBase],
     ) -> None:
-        # Close existing motors before re-initializing on config reload
         if hasattr(self, "motor_left"):
             self.motor_left.close()
             self.motor_right.close()
 
-        attrs = config.attributes.fields
+        def attr(name: str, default):
+            fields = config.attributes.fields
+            return type(default)(fields[name].number_value) if name in fields else default
 
-        self.width_mm: int = int(
-            attrs["width_mm"].number_value
-            if "width_mm" in attrs
-            else self.DEFAULT_WIDTH_MM
-        )
-        self.wheel_circumference_mm: int = int(
-            attrs["wheel_circumference_mm"].number_value
-            if "wheel_circumference_mm" in attrs
-            else self.DEFAULT_WHEEL_CIRCUMFERENCE_MM
-        )
-        self.max_speed_mm_s: float = float(
-            attrs["max_speed_mm_s"].number_value
-            if "max_speed_mm_s" in attrs
-            else self.DEFAULT_MAX_SPEED_MM_S
-        )
-        self.max_spin_deg_s: float = float(
-            attrs["max_spin_deg_s"].number_value
-            if "max_spin_deg_s" in attrs
-            else self.DEFAULT_MAX_SPIN_DEG_S
-        )
+        self.width_mm              = attr("width_mm",              self.DEFAULT_WIDTH_MM)
+        self.wheel_circumference_mm = attr("wheel_circumference_mm", self.DEFAULT_WHEEL_CIRCUMFERENCE_MM)
+        self.max_speed_mm_s        = attr("max_speed_mm_s",        self.DEFAULT_MAX_SPEED_MM_S)
+        self.max_spin_deg_s        = attr("max_spin_deg_s",        self.DEFAULT_MAX_SPIN_DEG_S)
 
-        # Motor 1 = left:  IN1=GPIO26 (fwd), IN2=GPIO13 (bwd), ENA=GPIO19 (PWM)
-        # Motor 2 = right: IN3=GPIO16 (fwd), IN4=GPIO20 (bwd), ENB=GPIO21 (PWM)
-        self.motor_left = Motor(forward=26, backward=13, enable=19, pwm=True)
-        self.motor_right = Motor(forward=16, backward=20, enable=21, pwm=True)
+        self.motor_left  = Motor(forward=LEFT_FORWARD,  backward=LEFT_BACKWARD,  enable=LEFT_ENABLE,  pwm=True)
+        self.motor_right = Motor(forward=RIGHT_FORWARD, backward=RIGHT_BACKWARD, enable=RIGHT_ENABLE, pwm=True)
         self._moving: bool = False
 
     # ------------------------------------------------------------------ #
@@ -84,10 +75,8 @@ class RoombaPiBase(Base):
         return max(lo, min(hi, value))
 
     def _set_motors(self, left: float, right: float) -> None:
-        left = self._clamp(left)
-        right = self._clamp(right)
-        self.motor_left.value = left
-        self.motor_right.value = right
+        self.motor_left.value  = self._clamp(left)
+        self.motor_right.value = self._clamp(right)
         self._moving = left != 0.0 or right != 0.0
 
     # ------------------------------------------------------------------ #
@@ -131,7 +120,7 @@ class RoombaPiBase(Base):
         power    = self._clamp(abs(velocity) / self.max_spin_deg_s, 0.0, 1.0)
         duration = abs(angle / velocity)
 
-        # Positive angle = CCW = left turn: left wheel back, right wheel forward
+        # Positive angle = CCW (left): left wheel back, right wheel forward
         if angle > 0:
             self._set_motors(-power, power)
         else:
@@ -151,9 +140,10 @@ class RoombaPiBase(Base):
     ) -> None:
         # linear.y: +1 = full forward, -1 = full reverse
         # angular.z: +1 = full left, -1 = full right
-        left  = self._clamp(linear.y - angular.z)
-        right = self._clamp(linear.y + angular.z)
-        self._set_motors(left, right)
+        self._set_motors(
+            self._clamp(linear.y - angular.z),
+            self._clamp(linear.y + angular.z),
+        )
 
     async def set_velocity(
         self,
@@ -165,12 +155,11 @@ class RoombaPiBase(Base):
         **kwargs,
     ) -> None:
         # linear.y in mm/s, angular.z in deg/s
-        omega = angular.z * math.pi / 180.0  # deg/s → rad/s
-        left_mm_s  = linear.y - (omega * self.width_mm / 2.0)
-        right_mm_s = linear.y + (omega * self.width_mm / 2.0)
-        left  = self._clamp(left_mm_s  / self.max_speed_mm_s)
-        right = self._clamp(right_mm_s / self.max_speed_mm_s)
-        self._set_motors(left, right)
+        omega = angular.z * math.pi / 180.0
+        self._set_motors(
+            self._clamp((linear.y - omega * self.width_mm / 2.0) / self.max_speed_mm_s),
+            self._clamp((linear.y + omega * self.width_mm / 2.0) / self.max_speed_mm_s),
+        )
 
     async def stop(
         self,
@@ -193,7 +182,7 @@ class RoombaPiBase(Base):
     ) -> Base.Properties:
         return Base.Properties(
             width_meters=self.width_mm / 1000.0,
-            turning_radius_meters=0.0,  # differential drive can turn in place
+            turning_radius_meters=0.0,
             wheel_circumference_meters=self.wheel_circumference_mm / 1000.0,
         )
 

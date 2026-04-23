@@ -14,8 +14,8 @@ from viam.resource.types import Model, ModelFamily
 Device.pin_factory = LGPIOFactory()
 
 # L298N pin assignments (BCM)
-LEFT_FORWARD  = 26
-LEFT_BACKWARD = 13
+LEFT_FORWARD  = 13
+LEFT_BACKWARD = 26
 LEFT_ENABLE   = 19
 RIGHT_FORWARD  = 16
 RIGHT_BACKWARD = 20

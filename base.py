@@ -206,3 +206,43 @@ Registry.register_resource_creator(
     RoombaPiBase.MODEL,
     ResourceCreatorRegistration(RoombaPiBase.new, RoombaPiBase.validate_config),
 )
+
+
+if __name__ == "__main__":
+    async def _test():
+        cfg = ComponentConfig(name="test")
+        b = RoombaPiBase.new(cfg, {})
+        try:
+            print("move_straight: 300mm @ 300mm/s (forward)")
+            await b.move_straight(300, 300)
+            await asyncio.sleep(0.5)
+
+            print("move_straight: -300mm @ 300mm/s (reverse)")
+            await b.move_straight(-300, 300)
+            await asyncio.sleep(0.5)
+
+            print("spin: +90° @ 90°/s (CCW / left)")
+            await b.spin(90, 90)
+            await asyncio.sleep(0.5)
+
+            print("spin: -90° @ 90°/s (CW / right)")
+            await b.spin(-90, 90)
+            await asyncio.sleep(0.5)
+
+            print("set_power: y=0.5 for 1s")
+            await b.set_power(Vector3(x=0, y=0.5, z=0), Vector3(x=0, y=0, z=0))
+            await asyncio.sleep(1)
+            await b.stop()
+            await asyncio.sleep(0.5)
+
+            print("set_velocity: y=300mm/s, angular.z=45°/s for 1s (arc left)")
+            await b.set_velocity(Vector3(x=0, y=300, z=0), Vector3(x=0, y=0, z=45))
+            await asyncio.sleep(1)
+            await b.stop()
+
+            print(f"is_moving={await b.is_moving()}")
+            print(f"properties={await b.get_properties()}")
+        finally:
+            await b.close()
+
+    asyncio.run(_test())

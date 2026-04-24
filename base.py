@@ -43,7 +43,7 @@ class RoombaPiBase(Base):
 
     @classmethod
     def validate_config(cls, config: ComponentConfig) -> Sequence[str]:
-        return []
+        return [], []
 
     def reconfigure(
         self,
@@ -92,6 +92,7 @@ class RoombaPiBase(Base):
         timeout: Optional[float] = None,
         **kwargs,
     ) -> None:
+        print(f"~~~~~~~~~~~~~~~~~~~~~~~~~moving straight dist={distance} velo={velocity}")
         if distance == 0 or velocity == 0:
             await self.stop()
             return
@@ -113,6 +114,7 @@ class RoombaPiBase(Base):
         timeout: Optional[float] = None,
         **kwargs,
     ) -> None:
+        print(f"~~~~~~~~~~~~~~~~~~~~~~~~~spin angle={angle} velo={velocity}")
         if angle == 0 or velocity == 0:
             await self.stop()
             return
@@ -140,6 +142,7 @@ class RoombaPiBase(Base):
     ) -> None:
         # linear.y: +1 = full forward, -1 = full reverse
         # angular.z: +1 = full left, -1 = full right
+        print(f"~~~~~~~~~~~~~~~~~~~~~~~~~set power linear={linear} angular={angular}")
         self._set_motors(
             self._clamp(linear.y - angular.z),
             self._clamp(linear.y + angular.z),
@@ -154,6 +157,7 @@ class RoombaPiBase(Base):
         timeout: Optional[float] = None,
         **kwargs,
     ) -> None:
+        print(f"~~~~~~~~~~~~~~~~~~~~~~~~~set velocity linear={linear} angular={angular}")
         # linear.y in mm/s, angular.z in deg/s
         omega = angular.z * math.pi / 180.0
         self._set_motors(

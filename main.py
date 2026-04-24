@@ -1,5 +1,8 @@
 import asyncio
 
+import sys
+sys.path.append('/home/viam/.local/lib/python3.11/site-packages/')
+
 from viam.module.module import Module
 from viam.components.base import Base
 

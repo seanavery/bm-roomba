@@ -1,4 +1,11 @@
-{ pkgs, system }:
+{
+  pkgs,
+  system,
+  # Extension hooks for callers that need to inject additional patches or
+  # cmake flags (e.g. cross-compile workarounds). Native builds leave empty.
+  extraPostPatch ? "",
+  extraCmakeFlags ? [ ],
+}:
 let
   rustUtilsArch =
     if system == "x86_64-linux" then
@@ -10,9 +17,14 @@ let
 
   rustUtilsVersion = "0.4.4";
 
+  rustUtilsHashes = {
+    "linux_x86_64" = "sha256-ecb6oa7gAI1mySR4sjUT/ftKkpPxzFeWuRbGmN/A89g=";
+    "linux_aarch64" = "sha256-Y3+PkdzSsKEgduTw8IctTdS+qp7L8VrSynVYj398pH8=";
+  };
+
   libviam-rust-utils = pkgs.fetchurl {
     url = "https://github.com/viamrobotics/rust-utils/releases/download/v${rustUtilsVersion}/libviam_rust_utils-${rustUtilsArch}.a";
-    hash = "sha256-ecb6oa7gAI1mySR4sjUT/ftKkpPxzFeWuRbGmN/A89g=";
+    hash = rustUtilsHashes.${rustUtilsArch};
   };
 
   viam-rust-utils-header = pkgs.fetchurl {
@@ -45,7 +57,8 @@ let
   sdkPostPatch = ''
     cp ${libviam-rust-utils} ./libviam_rust_utils-${rustUtilsArch}.a
     cp ${viam-rust-utils-header} ./viam_rust_utils.h
-  '';
+  ''
+  + extraPostPatch;
 
   # SDK .pc.in templates use `''${prefix}/<abs-path>` which becomes
   # `//nix/store/...`. nixpkgs' fixupPhase rejects this. Collapse here.
@@ -90,7 +103,8 @@ let
       "-DVIAMCPPSDK_USE_DYNAMIC_PROTOS=ON"
       "-DVIAMCPPSDK_OFFLINE_PROTO_GENERATION=ON"
       "-DCMAKE_CXX_STANDARD=17"
-    ];
+    ]
+    ++ extraCmakeFlags;
 
     buildPhase = ''
       runHook preBuild
@@ -137,7 +151,8 @@ let
       "-DVIAMCPPSDK_USE_WALL_WERROR=OFF"
       "-DVIAMCPPSDK_USE_DYNAMIC_PROTOS=OFF"
       "-DCMAKE_CXX_STANDARD=17"
-    ];
+    ]
+    ++ extraCmakeFlags;
 
     postInstall = sdkPostInstall;
   };

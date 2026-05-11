@@ -32,11 +32,13 @@ let
     hash = "sha256-eqVBbJdz3ya21tfp1WwnJxPiEHnvaoksz7W+RY4ewgg=";
   };
 
+  sdkVersion = "0.35.0";
+
   src = pkgs.fetchFromGitHub {
     owner = "viamrobotics";
     repo = "viam-cpp-sdk";
-    rev = "releases/v0.34.0";
-    hash = "sha256-xxtUgV5iNj0MFxfxm7G1o1Kd4wY0eI4Otz9D2xQ/tac=";
+    rev = "releases/v${sdkVersion}";
+    hash = "sha256-hIJadR3TgzbbYrLZkTy0pk6+Vry+0ch49vS08svPSUY=";
   };
 
   sdkBuildInputs = with pkgs; [
@@ -73,7 +75,7 @@ let
   # nixpkgs protoc + grpc_cpp_plugin. Output is the gen/viam/api dir.
   protos = pkgs.stdenv.mkDerivation {
     pname = "viam-cpp-sdk-protos";
-    version = "0.34.0";
+    version = sdkVersion;
 
     inherit src;
 
@@ -126,7 +128,7 @@ let
 
   sdk = pkgs.stdenv.mkDerivation {
     pname = "viam-cpp-sdk";
-    version = "0.34.0";
+    version = sdkVersion;
 
     inherit src;
 

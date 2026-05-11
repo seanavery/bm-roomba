@@ -51,7 +51,7 @@
               pkgs.lgpio
             ];
 
-            cmakeFlags = [ "-DCMAKE_CXX_STANDARD=17" ];
+            cmakeFlags = [ "-DCMAKE_CXX_STANDARD=23" ];
           };
 
           # Cross-compile to aarch64 with non-system deps overridden to static.
@@ -215,7 +215,7 @@
               ];
 
               cmakeFlags = [
-                "-DCMAKE_CXX_STANDARD=17"
+                "-DCMAKE_CXX_STANDARD=23"
               ];
 
               # cmakeFlags items are word-split by the cmake setup-hook; use

@@ -15,7 +15,7 @@ find_package(viam-cpp-sdk CONFIG REQUIRED COMPONENTS viamsdk)
 find_library(LGPIO_LIB NAMES lgpio REQUIRED)
 
 add_executable(base
-    main.cpp
+    src/main.cpp
     src/base.cpp
 )
 

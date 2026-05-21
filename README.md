@@ -1,9 +1,22 @@
-# Module base 
+# gamepad script:
+```bash
+python3 example/gamepad.py  # connect controller via bluetooth or USB first
+```
 
-Provide a description of the purpose of the module and any relevant information.
+# Building C++ module
+### Standard
+```bash
+viam module build local ...
+```
+### Nix
+Install [Nix](https://nixos.org/) and enable [flake support](https://wiki.nixos.org/wiki/Flakes#Nix_standalone).
+```bash
+nix develop  # or use direnv: https://github.com/nix-community/nix-direnv#installation
+nix build  # produces result/bin/base
+```
 
-## Models
-
-This module provides the following model(s):
-
-- [`viam:base:base`](viam_base_base.md) - Provide a brief description of the model
+## Deploy
+#### Nix
+```bash
+nix run .#deploy
+```

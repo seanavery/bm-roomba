@@ -94,7 +94,24 @@ Cleaner::Cleaner(const viam::sdk::Dependencies& /*deps*/, const viam::sdk::Resou
         const int fwd = attr_int(attrs, "forward_pin");
         const int bwd = attr_int(attrs, "backward_pin");
         motor_ = std::make_unique<TwoPinMotor>(chip_handle_, fwd, bwd);
+
+        // Optional enable pin: claim, drive high for the motor's lifetime.
+        if (attrs.find("enable_pin") != attrs.end()) {
+            const int en = attr_int(attrs, "enable_pin");
+            int rc = lgGpioClaimOutput(chip_handle_, 0, en, 1);
+            if (rc < 0) {
+                throw std::runtime_error(
+                    "lgGpioClaimOutput en pin=" + std::to_string(en) +
+                    " rc=" + std::to_string(rc));
+            }
+            en_pin_ = en;
+        }
     } catch (...) {
+        if (en_pin_ >= 0) {
+            lgGpioFree(chip_handle_, en_pin_);
+            en_pin_ = -1;
+        }
+        motor_.reset();
         lgGpiochipClose(chip_handle_);
         chip_handle_ = -1;
         throw;
@@ -103,6 +120,10 @@ Cleaner::Cleaner(const viam::sdk::Dependencies& /*deps*/, const viam::sdk::Resou
 
 Cleaner::~Cleaner() {
     motor_.reset();
+    if (en_pin_ >= 0) {
+        lgGpioWrite(chip_handle_, en_pin_, 0);
+        lgGpioFree(chip_handle_, en_pin_);
+    }
     if (chip_handle_ >= 0) {
         lgGpiochipClose(chip_handle_);
     }

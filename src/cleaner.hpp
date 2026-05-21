@@ -15,12 +15,14 @@ namespace cleaner {
 class TwoPinMotor;
 
 // viam::sdk::Motor implementation for an H-bridge driven by two GPIOs
-// with no encoder (no position reporting). The enable pin is assumed to
-// be jumpered always-on on the L298N driver.
+// with no encoder (no position reporting).
 //
 // Required config attributes:
 //   "forward_pin"  (number) - BCM GPIO for IN1
 //   "backward_pin" (number) - BCM GPIO for IN2
+// Optional config attributes:
+//   "enable_pin"   (number) - BCM GPIO wired to L298N ENA/ENB; set high
+//                              for the motor's lifetime. Omit if jumpered.
 class Cleaner : public viam::sdk::Motor {
 public:
     Cleaner(const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg);
@@ -45,6 +47,7 @@ public:
 private:
     int chip_handle_ = -1;
     std::unique_ptr<TwoPinMotor> motor_;
+    int en_pin_ = -1;  // -1 = no enable pin (jumpered)
     std::mutex mutex_;
     std::atomic<double> current_power_{0.0};
 };

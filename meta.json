@@ -11,6 +11,10 @@
     {
       "api": "rdk:component:base",
       "model": "sean:roomba-pi:base"
+    },
+    {
+      "api": "rdk:component:motor",
+      "model": "sean:roomba-pi:cleaner"
     }
   ],
   "first_run": "",

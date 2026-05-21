@@ -17,6 +17,7 @@ find_library(LGPIO_LIB NAMES lgpio REQUIRED)
 add_executable(base
     src/main.cpp
     src/base.cpp
+    src/cleaner.cpp
 )
 
 target_include_directories(base PUBLIC src)
@@ -30,6 +31,7 @@ target_link_libraries(base
 add_executable(base_crtp
     src/main_crtp.cpp
     src/base_crtp.cpp
+    src/cleaner.cpp
 )
 
 target_include_directories(base_crtp PUBLIC src)

@@ -243,5 +243,23 @@
           default = base;
         }
       );
+
+      apps = forEachSystem (
+        { pkgs, ... }:
+        {
+          # run on pi only
+          deploy = {
+            type = "app";
+            program = "${pkgs.writeShellApplication {
+              name = "deploy";
+              runtimeInputs = [ pkgs.openssh ];
+              text = ''
+                nix bundle
+                scp ./base-arx viam@av-pi-5-2:/home/viam/roomba-alden-cpp/build/Release/base
+              '';
+            }}/bin/deploy";
+          };
+        }
+      );
     };
 }

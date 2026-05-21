@@ -26,12 +26,25 @@ target_link_libraries(base
     ${LGPIO_LIB}
 )
 
+# Parallel CRTP/template variant. Same Viam module interface, different impl.
+add_executable(base_crtp
+    src/main_crtp.cpp
+    src/base_crtp.cpp
+)
+
+target_include_directories(base_crtp PUBLIC src)
+
+target_link_libraries(base_crtp
+    viam-cpp-sdk::viamsdk
+    ${LGPIO_LIB}
+)
+
 install(
     FILES meta.json
     DESTINATION .
 )
 
-install(TARGETS base)
+install(TARGETS base base_crtp)
 
 set(CPACK_PACKAGE_NAME "base")
 set(CPACK_PACKAGE_FILE_NAME "module")

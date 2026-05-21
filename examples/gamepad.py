@@ -4,7 +4,7 @@ import sys
 sys.path.append('/home/viam/.local/lib/python3.11/site-packages/')
 
 from dotenv import load_dotenv
-from evdev import InputDevice, ecodes
+from evdev import InputDevice, ecodes, list_devices
 from viam.robot.client import RobotClient
 from viam.components.base import Base
 from viam.components.motor import Motor
@@ -12,14 +12,31 @@ from viam.proto.common import Vector3
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
-DEVICE_PATH = '/dev/input/event5'
-
 API_KEY    = os.environ['VIAM_API_KEY']
 API_KEY_ID = os.environ['VIAM_API_KEY_ID']
 ROBOT_ADDR = os.environ['VIAM_ROBOT_ADDR']
 
 DEADZONE   = 0.15
 HZ         = 20
+
+
+def find_gamepad() -> InputDevice:
+    """Scan /dev/input/event* for a PS4 controller's main gamepad device.
+    The PS4 exposes several sub-devices sharing the same name prefix
+    (touchpad, motion sensors); pick the one that's *just* the gamepad.
+    """
+    excluded = ('Touchpad', 'Motion Sensors')
+    for path in list_devices():
+        try:
+            d = InputDevice(path)
+        except OSError:
+            continue
+        name = d.name
+        if (('Wireless Controller' in name or 'DualShock' in name)
+                and not any(s in name for s in excluded)):
+            return d
+        d.close()
+    raise RuntimeError("No gamepad detected — is it powered on and connected?")
 
 
 def normalize(val: int) -> float:
@@ -36,7 +53,7 @@ def normalize_trigger(val: int) -> float:
 
 class GamepadDriver:
     def __init__(self):
-        self.device  = InputDevice(DEVICE_PATH)
+        self.device  = find_gamepad()
         self.linear  = 0.0  # left stick Y
         self.angular = 0.0  # left stick X
         self.vacuum  = 0.0  # L2 analog forward (0..1), L1 digital reverse (-1)

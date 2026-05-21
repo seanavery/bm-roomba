@@ -252,10 +252,14 @@
             type = "app";
             program = "${pkgs.writeShellApplication {
               name = "deploy";
-              runtimeInputs = [ pkgs.openssh ];
+              runtimeInputs = [ pkgs.openssh pkgs.rsync ];
               text = ''
                 nix bundle
-                scp ./base-arx viam@av-pi-5-2:/home/viam/roomba-alden-cpp/build/Release/base
+                # -L follows the ./base-arx symlink into /nix/store; --chmod
+                # adds owner-write so subsequent deploys can overwrite.
+                rsync -L --progress --chmod=u+rwx,go+rx \
+                  ./base-arx \
+                  viam@av-pi-5-2:/home/viam/roomba-alden-cpp/build/Release/base
               '';
             }}/bin/deploy";
           };

@@ -1,9 +1,11 @@
 #include "cleaner.hpp"
+#include "gpio_util.hpp"
 
 #include <lgpio.h>
 
 #include <algorithm>
 #include <cmath>
+#include <expected>
 #include <stdexcept>
 #include <string>
 
@@ -14,15 +16,15 @@ namespace {
 constexpr int kGpioChip = 4;
 constexpr int kPwmFrequencyHz = 100;
 
-int attr_int(const viam::sdk::ProtoStruct& attrs, const std::string& key) {
+std::expected<int, std::string> attr_int(const viam::sdk::ProtoStruct& attrs, const std::string& key) {
     auto it = attrs.find(key);
     if (it == attrs.end()) [[unlikely]] {
-        throw std::runtime_error("missing required attribute: " + key);
+        return std::unexpected("missing required attribute: " + key);
     }
     if (it->second.is_a<double>()) {
         return static_cast<int>(it->second.get_unchecked<double>());
     }
-    throw std::runtime_error("attribute " + key + " is not a number");
+    return std::unexpected("attribute " + key + " is not a number");
 }
 
 } // namespace
@@ -31,12 +33,11 @@ class TwoPinMotor {
 public:
     TwoPinMotor(int chip_handle, int forward_pin, int backward_pin)
         : handle_(chip_handle), fwd_(forward_pin), bwd_(backward_pin) {
-        claim(fwd_, "fwd");
-        try {
-            claim(bwd_, "bwd");
-        } catch (...) {
+        auto result = gpio_util::claim_output(handle_, fwd_, "fwd")
+            .and_then([&] { return gpio_util::claim_output(handle_, bwd_, "bwd"); });
+        if (!result) {
             lgGpioFree(handle_, fwd_);
-            throw;
+            throw std::runtime_error(std::move(result).error());
         }
     }
 
@@ -69,42 +70,31 @@ private:
     int handle_;
     int fwd_;
     int bwd_;
-
-    void claim(int pin, const char* name) {
-        int rc = lgGpioClaimOutput(handle_, 0, pin, 0);
-        if (rc < 0) [[unlikely]] {
-            throw std::runtime_error(
-                std::string("lgGpioClaimOutput ") + name +
-                " pin=" + std::to_string(pin) +
-                " rc=" + std::to_string(rc));
-        }
-    }
 };
 
 Cleaner::Cleaner([[maybe_unused]] const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg)
     : viam::sdk::Motor(cfg.name()) {
-    chip_handle_ = lgGpiochipOpen(kGpioChip);
-    if (chip_handle_ < 0) [[unlikely]] {
-        throw std::runtime_error(
-            "lgGpiochipOpen(" + std::to_string(kGpioChip) +
-            ") rc=" + std::to_string(chip_handle_));
-    }
+    auto h = gpio_util::open_chip(kGpioChip);
+    if (!h) [[unlikely]] throw std::runtime_error(std::move(h).error());
+    chip_handle_ = *h;
+
     try {
         const auto& attrs = cfg.attributes();
-        const int fwd = attr_int(attrs, "forward_pin");
-        const int bwd = attr_int(attrs, "backward_pin");
-        motor_ = std::make_unique<TwoPinMotor>(chip_handle_, fwd, bwd);
+        auto fwd = attr_int(attrs, "forward_pin");
+        if (!fwd) throw std::runtime_error(std::move(fwd).error());
+        auto bwd = attr_int(attrs, "backward_pin");
+        if (!bwd) throw std::runtime_error(std::move(bwd).error());
+        motor_ = std::make_unique<TwoPinMotor>(chip_handle_, *fwd, *bwd);
 
         // Optional enable pin: claim, drive high for the motor's lifetime.
         if (attrs.find("enable_pin") != attrs.end()) {
-            const int en = attr_int(attrs, "enable_pin");
-            int rc = lgGpioClaimOutput(chip_handle_, 0, en, 1);
-            if (rc < 0) [[unlikely]] {
-                throw std::runtime_error(
-                    "lgGpioClaimOutput en pin=" + std::to_string(en) +
-                    " rc=" + std::to_string(rc));
+            auto en = attr_int(attrs, "enable_pin");
+            if (!en) throw std::runtime_error(std::move(en).error());
+            auto claimed = gpio_util::claim_output(chip_handle_, *en, "en", 1);
+            if (!claimed) [[unlikely]] {
+                throw std::runtime_error(std::move(claimed).error());
             }
-            en_pin_ = en;
+            en_pin_ = *en;
         }
     } catch (...) {
         if (en_pin_ >= 0) [[unlikely]] {

@@ -1,6 +1,8 @@
 #include "base_crtp.hpp"
+#include "gpio_util.hpp"
 
 #include <chrono>
+#include <expected>
 #include <stdexcept>
 #include <thread>
 
@@ -14,12 +16,9 @@ constexpr int kGpioChip = 4;
 
 Base::Base([[maybe_unused]] const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg)
     : viam::sdk::Base(cfg.name()) {
-    chip_handle_ = lgGpiochipOpen(kGpioChip);
-    if (chip_handle_ < 0) {
-        throw std::runtime_error(
-            "lgGpiochipOpen(" + std::to_string(kGpioChip) +
-            ") rc=" + std::to_string(chip_handle_));
-    }
+    auto h = gpio_util::open_chip(kGpioChip);
+    if (!h) throw std::runtime_error(std::move(h).error());
+    chip_handle_ = *h;
     try {
         drive_ = std::make_unique<RoombaBase>(chip_handle_);
     } catch (...) {

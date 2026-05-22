@@ -1,4 +1,5 @@
 #include "base.hpp"
+#include "gpio_util.hpp"
 
 #include <lgpio.h>
 
@@ -6,6 +7,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <expected>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -48,23 +50,14 @@ class Motor {
 public:
     Motor(int handle, int forward, int backward, int enable)
         : handle_(handle), fwd_(forward), bwd_(backward), en_(enable) {
-        auto claim = [&](int pin, const char* name) {
-            int rc = lgGpioClaimOutput(handle_, 0, pin, 0);
-            if (rc < 0) [[unlikely]] {
-                throw std::runtime_error(
-                    std::string("lgGpioClaimOutput ") + name + " pin=" + std::to_string(pin) +
-                    " rc=" + std::to_string(rc));
-            }
-        };
-        try {
-            claim(fwd_, "fwd");
-            claim(bwd_, "bwd");
-            claim(en_,  "en");
-        } catch (...) {
+        auto result = gpio_util::claim_output(handle_, fwd_, "fwd")
+            .and_then([&] { return gpio_util::claim_output(handle_, bwd_, "bwd"); })
+            .and_then([&] { return gpio_util::claim_output(handle_, en_,  "en"); });
+        if (!result) {
             lgGpioFree(handle_, fwd_);
             lgGpioFree(handle_, bwd_);
             lgGpioFree(handle_, en_);
-            throw;
+            throw std::runtime_error(std::move(result).error());
         }
     }
 
@@ -106,11 +99,9 @@ private:
 
 Base::Base([[maybe_unused]] const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg)
     : viam::sdk::Base(cfg.name()) {
-    chip_handle_ = lgGpiochipOpen(kGpioChip);
-    if (chip_handle_ < 0) [[unlikely]] {
-        throw std::runtime_error(
-            "lgGpiochipOpen(" + std::to_string(kGpioChip) + ") rc=" + std::to_string(chip_handle_));
-    }
+    auto h = gpio_util::open_chip(kGpioChip);
+    if (!h) [[unlikely]] throw std::runtime_error(std::move(h).error());
+    chip_handle_ = *h;
 
     try {
         motor_left_  = std::make_unique<Motor>(chip_handle_, kLeftForward,  kLeftBackward,  kLeftEnable);

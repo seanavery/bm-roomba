@@ -1,5 +1,7 @@
 #pragma once
 
+#include "gpio_util.hpp"
+
 #include <lgpio.h>
 
 #include <algorithm>
@@ -7,6 +9,7 @@
 #include <cmath>
 #include <concepts>
 #include <cstdint>
+#include <expected>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -38,9 +41,12 @@ template <int FwdPin, int BwdPin, int EnPin, int PwmHz = 100>
 class L298NMotor : public MotorBase<L298NMotor<FwdPin, BwdPin, EnPin, PwmHz>> {
 public:
     explicit L298NMotor(int chip_handle) : handle_(chip_handle) {
-        claim(FwdPin, "fwd");
-        claim(BwdPin, "bwd");
-        claim(EnPin,  "en");
+        auto result = gpio_util::claim_output(handle_, FwdPin, "fwd")
+            .and_then([&] { return gpio_util::claim_output(handle_, BwdPin, "bwd"); })
+            .and_then([&] { return gpio_util::claim_output(handle_, EnPin,  "en"); });
+        if (!result) {
+            throw std::runtime_error(std::move(result).error());
+        }
     }
 
     ~L298NMotor() {
@@ -74,16 +80,6 @@ public:
 
 private:
     int handle_;
-
-    void claim(int pin, const char* name) {
-        int rc = lgGpioClaimOutput(handle_, 0, pin, 0);
-        if (rc < 0) {
-            throw std::runtime_error(
-                std::string("lgGpioClaimOutput ") + name +
-                " pin=" + std::to_string(pin) +
-                " rc=" + std::to_string(rc));
-        }
-    }
 };
 
 struct DiffDriveSpec {

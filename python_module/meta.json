@@ -1,0 +1,13 @@
+{
+  "module_id": "sean:roomba-pi",
+  "visibility": "private",
+  "url": "",
+  "description": "Viam base component for a custom differential-drive robot on Raspberry Pi with L298N motor driver",
+  "models": [
+    {
+      "api": "rdk:component:base",
+      "model": "sean:roomba-pi:base"
+    }
+  ],
+  "entrypoint": "main.py"
+}

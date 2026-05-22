@@ -1,13 +1,31 @@
 {
+  "$schema": "https://dl.viam.dev/module.schema.json",
   "module_id": "sean:roomba-pi",
-  "visibility": "private",
+  "visibility": "public",
   "url": "",
-  "description": "Viam base component for a custom differential-drive robot on Raspberry Pi with L298N motor driver",
+  "description": "Modular base component: base",
+  "applications": null,
+  "markdown_link": "README.md",
+  "entrypoint": "bin/base",
   "models": [
     {
       "api": "rdk:component:base",
       "model": "sean:roomba-pi:base"
+    },
+    {
+      "api": "rdk:component:motor",
+      "model": "sean:roomba-pi:cleaner"
     }
   ],
-  "entrypoint": "main.py"
+  "first_run": "",
+  "build": {
+    "build": "conan build . --build missing -s:a compiler.cppstd=17 --lockfile-partial",
+    "setup": "",
+    "path": "build/Release/module.tar.gz",
+    "arch": [
+      "linux/amd64",
+      "linux/arm64"
+    ],
+    "distro": "bookworm"
+  }
 }

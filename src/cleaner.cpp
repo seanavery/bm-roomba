@@ -53,17 +53,10 @@ public:
 
     void set_value(double v) {
         v = std::clamp(v, -1.0, 1.0);
-        const double duty = std::abs(v) * 100.0;
-        if (v == 0.0) {
-            lgTxPwm(handle_, fwd_, kPwmFrequencyHz, 0.0, 0, 0);
-            lgTxPwm(handle_, bwd_, kPwmFrequencyHz, 0.0, 0, 0);
-        } else if (v > 0.0) {
-            lgTxPwm(handle_, bwd_, kPwmFrequencyHz, 0.0,  0, 0);
-            lgTxPwm(handle_, fwd_, kPwmFrequencyHz, duty, 0, 0);
-        } else {
-            lgTxPwm(handle_, fwd_, kPwmFrequencyHz, 0.0,  0, 0);
-            lgTxPwm(handle_, bwd_, kPwmFrequencyHz, duty, 0, 0);
-        }
+        double fwd_duty = v * (v > 0.0) * 100.0;
+        double bwd_duty = -v * (v < 0.0) * 100.0;
+        lgTxPwm(handle_, fwd_, kPwmFrequencyHz, fwd_duty, 0, 0);
+        lgTxPwm(handle_, bwd_, kPwmFrequencyHz, bwd_duty, 0, 0);
     }
 
 private:

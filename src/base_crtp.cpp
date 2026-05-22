@@ -53,7 +53,7 @@ void Base::move_straight(int64_t distance_mm, double mm_per_sec,
     }
     constexpr double max_speed = RoombaBase::spec().max_speed_mm_s;
     const double power = std::clamp(
-        (distance_mm > 0 ? std::abs(mm_per_sec) : -std::abs(mm_per_sec)) / max_speed,
+        std::abs(mm_per_sec) * (2 * (distance_mm > 0) - 1) / max_speed,
         -1.0, 1.0);
     const double duration_s = std::abs(static_cast<double>(distance_mm) / mm_per_sec);
 
@@ -78,11 +78,8 @@ void Base::spin(double angle_deg, double degs_per_sec,
 
     {
         std::lock_guard<std::mutex> lock(drive_mutex_);
-        if (angle_deg > 0.0) {
-            drive_->set_motors(-power, power);
-        } else {
-            drive_->set_motors(power, -power);
-        }
+        const double signed_power = power * (2 * (angle_deg > 0.0) - 1);
+        drive_->set_motors(-signed_power, signed_power);
         moving_.store(true);
     }
     std::this_thread::sleep_for(std::chrono::duration<double>(duration_s));

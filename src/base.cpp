@@ -75,21 +75,12 @@ public:
 
     void set_value(double value) {
         value = clamp(value, -1.0, 1.0);
-        double duty = std::abs(value) * 100.0;
-
-        if (value == 0.0) {
-            lgTxPwm(handle_, fwd_, kPwmFrequencyHz, 0.0, 0, 0);
-            lgTxPwm(handle_, bwd_, kPwmFrequencyHz, 0.0, 0, 0);
-            lgGpioWrite(handle_, en_, 0);
-        } else if (value > 0.0) {
-            lgGpioWrite(handle_, en_, 1);
-            lgTxPwm(handle_, bwd_, kPwmFrequencyHz, 0.0,  0, 0);
-            lgTxPwm(handle_, fwd_, kPwmFrequencyHz, duty, 0, 0);
-        } else {
-            lgGpioWrite(handle_, en_, 1);
-            lgTxPwm(handle_, fwd_, kPwmFrequencyHz, 0.0,  0, 0);
-            lgTxPwm(handle_, bwd_, kPwmFrequencyHz, duty, 0, 0);
-        }
+        double fwd_duty = value * (value > 0.0) * 100.0;
+        double bwd_duty = -value * (value < 0.0) * 100.0;
+        int enable = (value != 0.0);
+        lgGpioWrite(handle_, en_, enable);
+        lgTxPwm(handle_, fwd_, kPwmFrequencyHz, fwd_duty, 0, 0);
+        lgTxPwm(handle_, bwd_, kPwmFrequencyHz, bwd_duty, 0, 0);
     }
 
 private:
@@ -152,7 +143,7 @@ void Base::move_straight(int64_t distance_mm, double mm_per_sec, [[maybe_unused]
         return;
     }
     double speed = std::abs(mm_per_sec) / max_speed_mm_s_;
-    double power = clamp(distance_mm > 0 ? speed : -speed, -1.0, 1.0);
+    double power = clamp(speed * (2 * (distance_mm > 0) - 1), -1.0, 1.0);
     double duration_s = std::abs(static_cast<double>(distance_mm) / mm_per_sec);
 
     set_motors(power, power);
@@ -168,11 +159,8 @@ void Base::spin(double angle_deg, double degs_per_sec, [[maybe_unused]] const vi
     double power = clamp(std::abs(degs_per_sec) / max_spin_deg_s_, 0.0, 1.0);
     double duration_s = std::abs(angle_deg / degs_per_sec);
 
-    if (angle_deg > 0.0) {
-        set_motors(-power, power);
-    } else {
-        set_motors(power, -power);
-    }
+    double signed_power = power * (2 * (angle_deg > 0.0) - 1);
+    set_motors(-signed_power, signed_power);
     std::this_thread::sleep_for(std::chrono::duration<double>(duration_s));
     set_motors(0.0, 0.0);
 }

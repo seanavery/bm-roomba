@@ -63,20 +63,12 @@ public:
     L298NMotor& operator=(const L298NMotor&) = delete;
 
     void do_set(double v) {
-        const double duty = std::abs(v) * 100.0;
-        if (v == 0.0) {
-            lgTxPwm(handle_, FwdPin, PwmHz, 0.0, 0, 0);
-            lgTxPwm(handle_, BwdPin, PwmHz, 0.0, 0, 0);
-            lgGpioWrite(handle_, EnPin, 0);
-        } else if (v > 0.0) {
-            lgGpioWrite(handle_, EnPin, 1);
-            lgTxPwm(handle_, BwdPin, PwmHz, 0.0,  0, 0);
-            lgTxPwm(handle_, FwdPin, PwmHz, duty, 0, 0);
-        } else {
-            lgGpioWrite(handle_, EnPin, 1);
-            lgTxPwm(handle_, FwdPin, PwmHz, 0.0,  0, 0);
-            lgTxPwm(handle_, BwdPin, PwmHz, duty, 0, 0);
-        }
+        double fwd_duty = v * (v > 0.0) * 100.0;
+        double bwd_duty = -v * (v < 0.0) * 100.0;
+        int enable = (v != 0.0);
+        lgGpioWrite(handle_, EnPin, enable);
+        lgTxPwm(handle_, FwdPin, PwmHz, fwd_duty, 0, 0);
+        lgTxPwm(handle_, BwdPin, PwmHz, bwd_duty, 0, 0);
     }
 
 private:

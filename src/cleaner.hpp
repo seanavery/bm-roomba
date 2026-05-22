@@ -3,6 +3,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -45,9 +46,9 @@ public:
     void stop(const viam::sdk::ProtoStruct& extra) override;
 
 private:
-    int chip_handle_ = -1;
+    std::optional<int> chip_handle_;
     std::unique_ptr<TwoPinMotor> motor_;
-    int en_pin_ = -1;  // -1 = no enable pin (jumpered)
+    std::optional<int> en_pin_;  // empty = no enable pin (jumpered)
     std::mutex mutex_;
     std::atomic<double> current_power_{0.0};
 };

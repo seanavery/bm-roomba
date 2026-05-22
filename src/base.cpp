@@ -104,11 +104,11 @@ Base::Base([[maybe_unused]] const viam::sdk::Dependencies& deps, const viam::sdk
     chip_handle_ = *h;
 
     try {
-        motor_left_  = std::make_unique<Motor>(chip_handle_, kLeftForward,  kLeftBackward,  kLeftEnable);
-        motor_right_ = std::make_unique<Motor>(chip_handle_, kRightForward, kRightBackward, kRightEnable);
+        motor_left_  = std::make_unique<Motor>(*chip_handle_, kLeftForward,  kLeftBackward,  kLeftEnable);
+        motor_right_ = std::make_unique<Motor>(*chip_handle_, kRightForward, kRightBackward, kRightEnable);
     } catch (...) {
-        lgGpiochipClose(chip_handle_);
-        chip_handle_ = -1;
+        lgGpiochipClose(*chip_handle_);
+        chip_handle_.reset();
         throw;
     }
 
@@ -118,8 +118,8 @@ Base::Base([[maybe_unused]] const viam::sdk::Dependencies& deps, const viam::sdk
 Base::~Base() {
     motor_left_.reset();
     motor_right_.reset();
-    if (chip_handle_ >= 0) {
-        lgGpiochipClose(chip_handle_);
+    if (chip_handle_) {
+        lgGpiochipClose(*chip_handle_);
     }
 }
 

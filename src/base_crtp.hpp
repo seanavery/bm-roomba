@@ -12,6 +12,7 @@
 #include <expected>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -168,7 +169,7 @@ public:
     std::vector<viam::sdk::GeometryConfig> get_geometries(const viam::sdk::ProtoStruct& extra) override;
 
 private:
-    int chip_handle_ = -1;
+    std::optional<int> chip_handle_;
     std::unique_ptr<RoombaBase> drive_;
     std::mutex drive_mutex_;
     std::atomic<bool> moving_{false};

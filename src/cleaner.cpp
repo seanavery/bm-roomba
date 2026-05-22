@@ -84,38 +84,38 @@ Cleaner::Cleaner([[maybe_unused]] const viam::sdk::Dependencies& deps, const via
         if (!fwd) throw std::runtime_error(std::move(fwd).error());
         auto bwd = attr_int(attrs, "backward_pin");
         if (!bwd) throw std::runtime_error(std::move(bwd).error());
-        motor_ = std::make_unique<TwoPinMotor>(chip_handle_, *fwd, *bwd);
+        motor_ = std::make_unique<TwoPinMotor>(*chip_handle_, *fwd, *bwd);
 
         // Optional enable pin: claim, drive high for the motor's lifetime.
         if (attrs.find("enable_pin") != attrs.end()) {
             auto en = attr_int(attrs, "enable_pin");
             if (!en) throw std::runtime_error(std::move(en).error());
-            auto claimed = gpio_util::claim_output(chip_handle_, *en, "en", 1);
+            auto claimed = gpio_util::claim_output(*chip_handle_, *en, "en", 1);
             if (!claimed) [[unlikely]] {
                 throw std::runtime_error(std::move(claimed).error());
             }
             en_pin_ = *en;
         }
     } catch (...) {
-        if (en_pin_ >= 0) [[unlikely]] {
-            lgGpioFree(chip_handle_, en_pin_);
-            en_pin_ = -1;
+        if (en_pin_) [[unlikely]] {
+            lgGpioFree(*chip_handle_, *en_pin_);
+            en_pin_.reset();
         }
         motor_.reset();
-        lgGpiochipClose(chip_handle_);
-        chip_handle_ = -1;
+        lgGpiochipClose(*chip_handle_);
+        chip_handle_.reset();
         throw;
     }
 }
 
 Cleaner::~Cleaner() {
     motor_.reset();
-    if (en_pin_ >= 0) {
-        lgGpioWrite(chip_handle_, en_pin_, 0);
-        lgGpioFree(chip_handle_, en_pin_);
+    if (en_pin_) {
+        lgGpioWrite(*chip_handle_, *en_pin_, 0);
+        lgGpioFree(*chip_handle_, *en_pin_);
     }
-    if (chip_handle_ >= 0) {
-        lgGpiochipClose(chip_handle_);
+    if (chip_handle_) {
+        lgGpiochipClose(*chip_handle_);
     }
 }
 

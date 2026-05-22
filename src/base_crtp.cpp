@@ -20,18 +20,18 @@ Base::Base([[maybe_unused]] const viam::sdk::Dependencies& deps, const viam::sdk
     if (!h) throw std::runtime_error(std::move(h).error());
     chip_handle_ = *h;
     try {
-        drive_ = std::make_unique<RoombaBase>(chip_handle_);
+        drive_ = std::make_unique<RoombaBase>(*chip_handle_);
     } catch (...) {
-        lgGpiochipClose(chip_handle_);
-        chip_handle_ = -1;
+        lgGpiochipClose(*chip_handle_);
+        chip_handle_.reset();
         throw;
     }
 }
 
 Base::~Base() {
     drive_.reset();
-    if (chip_handle_ >= 0) {
-        lgGpiochipClose(chip_handle_);
+    if (chip_handle_) {
+        lgGpiochipClose(*chip_handle_);
     }
 }
 

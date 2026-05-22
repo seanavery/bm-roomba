@@ -81,7 +81,7 @@ private:
     }
 };
 
-Cleaner::Cleaner(const viam::sdk::Dependencies& /*deps*/, const viam::sdk::ResourceConfig& cfg)
+Cleaner::Cleaner([[maybe_unused]] const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg)
     : viam::sdk::Motor(cfg.name()) {
     chip_handle_ = lgGpiochipOpen(kGpioChip);
     if (chip_handle_ < 0) {
@@ -137,37 +137,37 @@ std::vector<std::string> Cleaner::validate(const viam::sdk::ResourceConfig& cfg)
     return errs;
 }
 
-void Cleaner::set_power(double power_pct, const viam::sdk::ProtoStruct& /*extra*/) {
+void Cleaner::set_power(double power_pct, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     std::lock_guard<std::mutex> lock(mutex_);
     motor_->set_value(power_pct);
     current_power_.store(std::clamp(power_pct, -1.0, 1.0));
 }
 
-void Cleaner::go_for(double /*rpm*/, double /*revolutions*/, const viam::sdk::ProtoStruct& /*extra*/) {
+void Cleaner::go_for([[maybe_unused]] double rpm, [[maybe_unused]] double revolutions, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     throw std::runtime_error("go_for not supported (no encoder)");
 }
 
-void Cleaner::go_to(double /*rpm*/, double /*position_revolutions*/, const viam::sdk::ProtoStruct& /*extra*/) {
+void Cleaner::go_to([[maybe_unused]] double rpm, [[maybe_unused]] double position_revolutions, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     throw std::runtime_error("go_to not supported (no encoder)");
 }
 
-void Cleaner::set_rpm(double /*rpm*/, const viam::sdk::ProtoStruct& /*extra*/) {
+void Cleaner::set_rpm([[maybe_unused]] double rpm, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     throw std::runtime_error("set_rpm not supported (no encoder)");
 }
 
-void Cleaner::reset_zero_position(double /*offset*/, const viam::sdk::ProtoStruct& /*extra*/) {
+void Cleaner::reset_zero_position([[maybe_unused]] double offset, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     throw std::runtime_error("reset_zero_position not supported (no encoder)");
 }
 
-Cleaner::position Cleaner::get_position(const viam::sdk::ProtoStruct& /*extra*/) {
+Cleaner::position Cleaner::get_position([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     throw std::runtime_error("get_position not supported (no encoder)");
 }
 
-Cleaner::properties Cleaner::get_properties(const viam::sdk::ProtoStruct& /*extra*/) {
+Cleaner::properties Cleaner::get_properties([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     return { .position_reporting = false };
 }
 
-Cleaner::power_status Cleaner::get_power_status(const viam::sdk::ProtoStruct& /*extra*/) {
+Cleaner::power_status Cleaner::get_power_status([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     const double p = current_power_.load();
     return { .is_on = (p != 0.0), .power_pct = p };
 }
@@ -180,15 +180,15 @@ viam::sdk::ProtoStruct Cleaner::get_status() {
     return {};
 }
 
-viam::sdk::ProtoStruct Cleaner::do_command(const viam::sdk::ProtoStruct& /*command*/) {
+viam::sdk::ProtoStruct Cleaner::do_command([[maybe_unused]] const viam::sdk::ProtoStruct& command) {
     throw std::runtime_error("do_command not implemented");
 }
 
-std::vector<viam::sdk::GeometryConfig> Cleaner::get_geometries(const viam::sdk::ProtoStruct& /*extra*/) {
+std::vector<viam::sdk::GeometryConfig> Cleaner::get_geometries([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     return {};
 }
 
-void Cleaner::stop(const viam::sdk::ProtoStruct& /*extra*/) {
+void Cleaner::stop([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     std::lock_guard<std::mutex> lock(mutex_);
     motor_->set_value(0.0);
     current_power_.store(0.0);

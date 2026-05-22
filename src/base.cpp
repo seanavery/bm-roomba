@@ -104,7 +104,7 @@ private:
     int fwd_, bwd_, en_;
 };
 
-Base::Base(const viam::sdk::Dependencies& /*deps*/, const viam::sdk::ResourceConfig& cfg)
+Base::Base([[maybe_unused]] const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg)
     : viam::sdk::Base(cfg.name()) {
     chip_handle_ = lgGpiochipOpen(kGpioChip);
     if (chip_handle_ < 0) {
@@ -140,7 +140,7 @@ void Base::reconfigure(const viam::sdk::ResourceConfig& cfg) {
     max_spin_deg_s_         = attr_double(attrs, "max_spin_deg_s",         kDefaultMaxSpinDegS);
 }
 
-std::vector<std::string> Base::validate(const viam::sdk::ResourceConfig& /*cfg*/) {
+std::vector<std::string> Base::validate([[maybe_unused]] const viam::sdk::ResourceConfig& cfg) {
     return {};
 }
 
@@ -151,11 +151,11 @@ void Base::set_motors(double left, double right) {
     moving_.store(left != 0.0 || right != 0.0);
 }
 
-void Base::stop(const viam::sdk::ProtoStruct& /*extra*/) {
+void Base::stop([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     set_motors(0.0, 0.0);
 }
 
-void Base::move_straight(int64_t distance_mm, double mm_per_sec, const viam::sdk::ProtoStruct& /*extra*/) {
+void Base::move_straight(int64_t distance_mm, double mm_per_sec, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     if (distance_mm == 0 || mm_per_sec == 0.0) {
         set_motors(0.0, 0.0);
         return;
@@ -169,7 +169,7 @@ void Base::move_straight(int64_t distance_mm, double mm_per_sec, const viam::sdk
     set_motors(0.0, 0.0);
 }
 
-void Base::spin(double angle_deg, double degs_per_sec, const viam::sdk::ProtoStruct& /*extra*/) {
+void Base::spin(double angle_deg, double degs_per_sec, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     if (angle_deg == 0.0 || degs_per_sec == 0.0) {
         set_motors(0.0, 0.0);
         return;
@@ -186,13 +186,13 @@ void Base::spin(double angle_deg, double degs_per_sec, const viam::sdk::ProtoStr
     set_motors(0.0, 0.0);
 }
 
-void Base::set_power(const viam::sdk::Vector3& linear, const viam::sdk::Vector3& angular, const viam::sdk::ProtoStruct& /*extra*/) {
+void Base::set_power(const viam::sdk::Vector3& linear, const viam::sdk::Vector3& angular, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     set_motors(
         clamp(linear.y() - angular.z(), -1.0, 1.0),
         clamp(linear.y() + angular.z(), -1.0, 1.0));
 }
 
-void Base::set_velocity(const viam::sdk::Vector3& linear, const viam::sdk::Vector3& angular, const viam::sdk::ProtoStruct& /*extra*/) {
+void Base::set_velocity(const viam::sdk::Vector3& linear, const viam::sdk::Vector3& angular, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     double omega = angular.z() * M_PI / 180.0;
     double half_width = width_mm_ / 2.0;
     set_motors(
@@ -208,7 +208,7 @@ viam::sdk::ProtoStruct Base::get_status() {
     return {};
 }
 
-viam::sdk::Base::properties Base::get_properties(const viam::sdk::ProtoStruct& /*extra*/) {
+viam::sdk::Base::properties Base::get_properties([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     viam::sdk::Base::properties p{};
     p.width_meters               = width_mm_ / 1000.0;
     p.turning_radius_meters      = 0.0;
@@ -216,11 +216,11 @@ viam::sdk::Base::properties Base::get_properties(const viam::sdk::ProtoStruct& /
     return p;
 }
 
-viam::sdk::ProtoStruct Base::do_command(const viam::sdk::ProtoStruct& /*command*/) {
+viam::sdk::ProtoStruct Base::do_command([[maybe_unused]] const viam::sdk::ProtoStruct& command) {
     throw std::runtime_error("do_command not implemented");
 }
 
-std::vector<viam::sdk::GeometryConfig> Base::get_geometries(const viam::sdk::ProtoStruct& /*extra*/) {
+std::vector<viam::sdk::GeometryConfig> Base::get_geometries([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     return {};
 }
 

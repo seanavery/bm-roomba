@@ -15,11 +15,11 @@ let
     else
       throw "unsupported system for rust-utils: ${system}";
 
-  rustUtilsVersion = "0.4.4";
+  rustUtilsVersion = "0.5.3";
 
   rustUtilsHashes = {
-    "linux_x86_64" = "sha256-ecb6oa7gAI1mySR4sjUT/ftKkpPxzFeWuRbGmN/A89g=";
-    "linux_aarch64" = "sha256-Y3+PkdzSsKEgduTw8IctTdS+qp7L8VrSynVYj398pH8=";
+    "linux_x86_64" = "sha256-L9WvA1Tz5IrUWzBkMb9+SGWGA+hD2C+LcCPdx0vI+H8=";
+    "linux_aarch64" = "sha256-2n7UnLimUEjscZ6NEapNiVm4ScTiDDhM+eKHgG0LyEg=";
   };
 
   libviam-rust-utils = pkgs.fetchurl {
@@ -29,16 +29,16 @@ let
 
   viam-rust-utils-header = pkgs.fetchurl {
     url = "https://github.com/viamrobotics/rust-utils/releases/download/v${rustUtilsVersion}/viam_rust_utils.h";
-    hash = "sha256-eqVBbJdz3ya21tfp1WwnJxPiEHnvaoksz7W+RY4ewgg=";
+    hash = "sha256-msjUmgUzyGT6aCa4e4YxqzoyTunC1Aj0dns3CeGDzgA=";
   };
 
-  sdkVersion = "0.35.0";
+  sdkVersion = "0.38.0";
 
   src = pkgs.fetchFromGitHub {
     owner = "viamrobotics";
     repo = "viam-cpp-sdk";
     rev = "releases/v${sdkVersion}";
-    hash = "sha256-hIJadR3TgzbbYrLZkTy0pk6+Vry+0ch49vS08svPSUY=";
+    hash = "sha256-QVV8aUlK7uB6bz89pbuB0i6hvUourNd+oKua9vw0KPU=";
   };
 
   sdkBuildInputs = with pkgs; [
@@ -123,7 +123,7 @@ let
 
     outputHashAlgo = "sha256";
     outputHashMode = "recursive";
-    outputHash = "sha256-wCpmx4CP63Jig70zkVouQ/mtGvj/7u2Z+0h4OTh6onM=";
+    outputHash = "sha256-JpmrkKp7CscQXLupxEPyzuX36kdvqcA0RlXbMhwqIeE=";
   };
 
   sdk = pkgs.stdenv.mkDerivation {

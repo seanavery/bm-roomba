@@ -3,6 +3,7 @@
 #include <lgpio.h>
 
 #include <expected>
+#include <format>
 #include <string>
 
 namespace gpio_util {
@@ -10,8 +11,7 @@ namespace gpio_util {
 inline std::expected<int, std::string> open_chip(int chip) {
     int h = lgGpiochipOpen(chip);
     if (h < 0) [[unlikely]] {
-        return std::unexpected(
-            "lgGpiochipOpen(" + std::to_string(chip) + ") rc=" + std::to_string(h));
+        return std::unexpected(std::format("lgGpiochipOpen({}) rc={}", chip, h));
     }
     return h;
 }
@@ -19,9 +19,7 @@ inline std::expected<int, std::string> open_chip(int chip) {
 inline std::expected<void, std::string> claim_output(int handle, int pin, const char* name, int level = 0) {
     int rc = lgGpioClaimOutput(handle, 0, pin, level);
     if (rc < 0) [[unlikely]] {
-        return std::unexpected(
-            std::string("lgGpioClaimOutput ") + name + " pin=" + std::to_string(pin) +
-            " rc=" + std::to_string(rc));
+        return std::unexpected(std::format("lgGpioClaimOutput {} pin={} rc={}", name, pin, rc));
     }
     return {};
 }

@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <expected>
+#include <format>
 #include <stdexcept>
 #include <string>
 
@@ -19,12 +20,12 @@ constexpr int kPwmFrequencyHz = 100;
 std::expected<int, std::string> attr_int(const viam::sdk::ProtoStruct& attrs, const std::string& key) {
     auto it = attrs.find(key);
     if (it == attrs.end()) [[unlikely]] {
-        return std::unexpected("missing required attribute: " + key);
+        return std::unexpected(std::format("missing required attribute: {}", key));
     }
     if (it->second.is_a<double>()) {
         return static_cast<int>(it->second.get_unchecked<double>());
     }
-    return std::unexpected("attribute " + key + " is not a number");
+    return std::unexpected(std::format("attribute {} is not a number", key));
 }
 
 } // namespace

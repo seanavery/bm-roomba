@@ -50,7 +50,7 @@ public:
         : handle_(handle), fwd_(forward), bwd_(backward), en_(enable) {
         auto claim = [&](int pin, const char* name) {
             int rc = lgGpioClaimOutput(handle_, 0, pin, 0);
-            if (rc < 0) {
+            if (rc < 0) [[unlikely]] {
                 throw std::runtime_error(
                     std::string("lgGpioClaimOutput ") + name + " pin=" + std::to_string(pin) +
                     " rc=" + std::to_string(rc));
@@ -107,7 +107,7 @@ private:
 Base::Base([[maybe_unused]] const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg)
     : viam::sdk::Base(cfg.name()) {
     chip_handle_ = lgGpiochipOpen(kGpioChip);
-    if (chip_handle_ < 0) {
+    if (chip_handle_ < 0) [[unlikely]] {
         throw std::runtime_error(
             "lgGpiochipOpen(" + std::to_string(kGpioChip) + ") rc=" + std::to_string(chip_handle_));
     }

@@ -16,7 +16,7 @@ constexpr int kPwmFrequencyHz = 100;
 
 int attr_int(const viam::sdk::ProtoStruct& attrs, const std::string& key) {
     auto it = attrs.find(key);
-    if (it == attrs.end()) {
+    if (it == attrs.end()) [[unlikely]] {
         throw std::runtime_error("missing required attribute: " + key);
     }
     if (it->second.is_a<double>()) {
@@ -72,7 +72,7 @@ private:
 
     void claim(int pin, const char* name) {
         int rc = lgGpioClaimOutput(handle_, 0, pin, 0);
-        if (rc < 0) {
+        if (rc < 0) [[unlikely]] {
             throw std::runtime_error(
                 std::string("lgGpioClaimOutput ") + name +
                 " pin=" + std::to_string(pin) +
@@ -84,7 +84,7 @@ private:
 Cleaner::Cleaner([[maybe_unused]] const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg)
     : viam::sdk::Motor(cfg.name()) {
     chip_handle_ = lgGpiochipOpen(kGpioChip);
-    if (chip_handle_ < 0) {
+    if (chip_handle_ < 0) [[unlikely]] {
         throw std::runtime_error(
             "lgGpiochipOpen(" + std::to_string(kGpioChip) +
             ") rc=" + std::to_string(chip_handle_));
@@ -99,7 +99,7 @@ Cleaner::Cleaner([[maybe_unused]] const viam::sdk::Dependencies& deps, const via
         if (attrs.find("enable_pin") != attrs.end()) {
             const int en = attr_int(attrs, "enable_pin");
             int rc = lgGpioClaimOutput(chip_handle_, 0, en, 1);
-            if (rc < 0) {
+            if (rc < 0) [[unlikely]] {
                 throw std::runtime_error(
                     "lgGpioClaimOutput en pin=" + std::to_string(en) +
                     " rc=" + std::to_string(rc));
@@ -107,7 +107,7 @@ Cleaner::Cleaner([[maybe_unused]] const viam::sdk::Dependencies& deps, const via
             en_pin_ = en;
         }
     } catch (...) {
-        if (en_pin_ >= 0) {
+        if (en_pin_ >= 0) [[unlikely]] {
             lgGpioFree(chip_handle_, en_pin_);
             en_pin_ = -1;
         }
@@ -132,8 +132,8 @@ Cleaner::~Cleaner() {
 std::vector<std::string> Cleaner::validate(const viam::sdk::ResourceConfig& cfg) {
     std::vector<std::string> errs;
     const auto& attrs = cfg.attributes();
-    if (attrs.find("forward_pin")  == attrs.end()) errs.push_back("missing forward_pin");
-    if (attrs.find("backward_pin") == attrs.end()) errs.push_back("missing backward_pin");
+    if (attrs.find("forward_pin")  == attrs.end()) [[unlikely]] errs.push_back("missing forward_pin");
+    if (attrs.find("backward_pin") == attrs.end()) [[unlikely]] errs.push_back("missing backward_pin");
     return errs;
 }
 

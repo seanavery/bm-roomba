@@ -1,6 +1,7 @@
 #include <cstdint>
-#include <iostream>
+#include <cstdio>
 #include <memory>
+#include <print>
 #include <vector>
 
 #include <viam/sdk/common/exception.hpp>
@@ -38,6 +39,6 @@ int main(int argc, char** argv) try {
 
     return EXIT_SUCCESS;
 } catch (const viam::sdk::Exception& ex) {
-    std::cerr << "main_crtp failed with exception: " << ex.what() << "\n";
+    std::println(stderr, "main_crtp failed with exception: {}", ex.what());
     return EXIT_FAILURE;
 }

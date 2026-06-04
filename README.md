@@ -17,6 +17,8 @@ nix build  # produces result/bin/base
 
 ## Deploy
 #### Nix
+Run on same architecture only; eg. pi -> pi.
+This will build a self-contained executable and rsync it to the main pi.
 ```bash
 nix run .#deploy
 ```

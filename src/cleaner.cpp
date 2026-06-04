@@ -1,9 +1,12 @@
 #include "cleaner.hpp"
+#include "gpio_util.hpp"
 
 #include <lgpio.h>
 
 #include <algorithm>
 #include <cmath>
+#include <expected>
+#include <format>
 #include <stdexcept>
 #include <string>
 
@@ -14,15 +17,15 @@ namespace {
 constexpr int kGpioChip = 4;
 constexpr int kPwmFrequencyHz = 100;
 
-int attr_int(const viam::sdk::ProtoStruct& attrs, const std::string& key) {
+std::expected<int, std::string> attr_int(const viam::sdk::ProtoStruct& attrs, const std::string& key) {
     auto it = attrs.find(key);
-    if (it == attrs.end()) {
-        throw std::runtime_error("missing required attribute: " + key);
+    if (it == attrs.end()) [[unlikely]] {
+        return std::unexpected(std::format("missing required attribute: {}", key));
     }
     if (it->second.is_a<double>()) {
         return static_cast<int>(it->second.get_unchecked<double>());
     }
-    throw std::runtime_error("attribute " + key + " is not a number");
+    return std::unexpected(std::format("attribute {} is not a number", key));
 }
 
 } // namespace
@@ -31,12 +34,11 @@ class TwoPinMotor {
 public:
     TwoPinMotor(int chip_handle, int forward_pin, int backward_pin)
         : handle_(chip_handle), fwd_(forward_pin), bwd_(backward_pin) {
-        claim(fwd_, "fwd");
-        try {
-            claim(bwd_, "bwd");
-        } catch (...) {
+        auto result = gpio_util::claim_output(handle_, fwd_, "fwd")
+            .and_then([&] { return gpio_util::claim_output(handle_, bwd_, "bwd"); });
+        if (!result) {
             lgGpioFree(handle_, fwd_);
-            throw;
+            throw std::runtime_error(std::move(result).error());
         }
     }
 
@@ -52,122 +54,104 @@ public:
 
     void set_value(double v) {
         v = std::clamp(v, -1.0, 1.0);
-        const double duty = std::abs(v) * 100.0;
-        if (v == 0.0) {
-            lgTxPwm(handle_, fwd_, kPwmFrequencyHz, 0.0, 0, 0);
-            lgTxPwm(handle_, bwd_, kPwmFrequencyHz, 0.0, 0, 0);
-        } else if (v > 0.0) {
-            lgTxPwm(handle_, bwd_, kPwmFrequencyHz, 0.0,  0, 0);
-            lgTxPwm(handle_, fwd_, kPwmFrequencyHz, duty, 0, 0);
-        } else {
-            lgTxPwm(handle_, fwd_, kPwmFrequencyHz, 0.0,  0, 0);
-            lgTxPwm(handle_, bwd_, kPwmFrequencyHz, duty, 0, 0);
-        }
+        double fwd_duty = v * (v > 0.0) * 100.0;
+        double bwd_duty = -v * (v < 0.0) * 100.0;
+        lgTxPwm(handle_, fwd_, kPwmFrequencyHz, fwd_duty, 0, 0);
+        lgTxPwm(handle_, bwd_, kPwmFrequencyHz, bwd_duty, 0, 0);
     }
 
 private:
     int handle_;
     int fwd_;
     int bwd_;
-
-    void claim(int pin, const char* name) {
-        int rc = lgGpioClaimOutput(handle_, 0, pin, 0);
-        if (rc < 0) {
-            throw std::runtime_error(
-                std::string("lgGpioClaimOutput ") + name +
-                " pin=" + std::to_string(pin) +
-                " rc=" + std::to_string(rc));
-        }
-    }
 };
 
-Cleaner::Cleaner(const viam::sdk::Dependencies& /*deps*/, const viam::sdk::ResourceConfig& cfg)
+Cleaner::Cleaner([[maybe_unused]] const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg)
     : viam::sdk::Motor(cfg.name()) {
-    chip_handle_ = lgGpiochipOpen(kGpioChip);
-    if (chip_handle_ < 0) {
-        throw std::runtime_error(
-            "lgGpiochipOpen(" + std::to_string(kGpioChip) +
-            ") rc=" + std::to_string(chip_handle_));
-    }
+    auto h = gpio_util::open_chip(kGpioChip);
+    if (!h) [[unlikely]] throw std::runtime_error(std::move(h).error());
+    chip_handle_ = *h;
+
     try {
         const auto& attrs = cfg.attributes();
-        const int fwd = attr_int(attrs, "forward_pin");
-        const int bwd = attr_int(attrs, "backward_pin");
-        motor_ = std::make_unique<TwoPinMotor>(chip_handle_, fwd, bwd);
+        auto fwd = attr_int(attrs, "forward_pin");
+        if (!fwd) throw std::runtime_error(std::move(fwd).error());
+        auto bwd = attr_int(attrs, "backward_pin");
+        if (!bwd) throw std::runtime_error(std::move(bwd).error());
+        motor_ = std::make_unique<TwoPinMotor>(*chip_handle_, *fwd, *bwd);
 
         // Optional enable pin: claim, drive high for the motor's lifetime.
         if (attrs.find("enable_pin") != attrs.end()) {
-            const int en = attr_int(attrs, "enable_pin");
-            int rc = lgGpioClaimOutput(chip_handle_, 0, en, 1);
-            if (rc < 0) {
-                throw std::runtime_error(
-                    "lgGpioClaimOutput en pin=" + std::to_string(en) +
-                    " rc=" + std::to_string(rc));
+            auto en = attr_int(attrs, "enable_pin");
+            if (!en) throw std::runtime_error(std::move(en).error());
+            auto claimed = gpio_util::claim_output(*chip_handle_, *en, "en", 1);
+            if (!claimed) [[unlikely]] {
+                throw std::runtime_error(std::move(claimed).error());
             }
-            en_pin_ = en;
+            en_pin_ = *en;
         }
     } catch (...) {
-        if (en_pin_ >= 0) {
-            lgGpioFree(chip_handle_, en_pin_);
-            en_pin_ = -1;
+        if (en_pin_) [[unlikely]] {
+            lgGpioFree(*chip_handle_, *en_pin_);
+            en_pin_.reset();
         }
         motor_.reset();
-        lgGpiochipClose(chip_handle_);
-        chip_handle_ = -1;
+        lgGpiochipClose(*chip_handle_);
+        chip_handle_.reset();
         throw;
     }
 }
 
 Cleaner::~Cleaner() {
     motor_.reset();
-    if (en_pin_ >= 0) {
-        lgGpioWrite(chip_handle_, en_pin_, 0);
-        lgGpioFree(chip_handle_, en_pin_);
+    if (en_pin_) {
+        lgGpioWrite(*chip_handle_, *en_pin_, 0);
+        lgGpioFree(*chip_handle_, *en_pin_);
     }
-    if (chip_handle_ >= 0) {
-        lgGpiochipClose(chip_handle_);
+    if (chip_handle_) {
+        lgGpiochipClose(*chip_handle_);
     }
 }
 
 std::vector<std::string> Cleaner::validate(const viam::sdk::ResourceConfig& cfg) {
     std::vector<std::string> errs;
     const auto& attrs = cfg.attributes();
-    if (attrs.find("forward_pin")  == attrs.end()) errs.push_back("missing forward_pin");
-    if (attrs.find("backward_pin") == attrs.end()) errs.push_back("missing backward_pin");
+    if (attrs.find("forward_pin")  == attrs.end()) [[unlikely]] errs.push_back("missing forward_pin");
+    if (attrs.find("backward_pin") == attrs.end()) [[unlikely]] errs.push_back("missing backward_pin");
     return errs;
 }
 
-void Cleaner::set_power(double power_pct, const viam::sdk::ProtoStruct& /*extra*/) {
+void Cleaner::set_power(double power_pct, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     std::lock_guard<std::mutex> lock(mutex_);
     motor_->set_value(power_pct);
     current_power_.store(std::clamp(power_pct, -1.0, 1.0));
 }
 
-void Cleaner::go_for(double /*rpm*/, double /*revolutions*/, const viam::sdk::ProtoStruct& /*extra*/) {
+void Cleaner::go_for([[maybe_unused]] double rpm, [[maybe_unused]] double revolutions, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     throw std::runtime_error("go_for not supported (no encoder)");
 }
 
-void Cleaner::go_to(double /*rpm*/, double /*position_revolutions*/, const viam::sdk::ProtoStruct& /*extra*/) {
+void Cleaner::go_to([[maybe_unused]] double rpm, [[maybe_unused]] double position_revolutions, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     throw std::runtime_error("go_to not supported (no encoder)");
 }
 
-void Cleaner::set_rpm(double /*rpm*/, const viam::sdk::ProtoStruct& /*extra*/) {
+void Cleaner::set_rpm([[maybe_unused]] double rpm, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     throw std::runtime_error("set_rpm not supported (no encoder)");
 }
 
-void Cleaner::reset_zero_position(double /*offset*/, const viam::sdk::ProtoStruct& /*extra*/) {
+void Cleaner::reset_zero_position([[maybe_unused]] double offset, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     throw std::runtime_error("reset_zero_position not supported (no encoder)");
 }
 
-Cleaner::position Cleaner::get_position(const viam::sdk::ProtoStruct& /*extra*/) {
+Cleaner::position Cleaner::get_position([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     throw std::runtime_error("get_position not supported (no encoder)");
 }
 
-Cleaner::properties Cleaner::get_properties(const viam::sdk::ProtoStruct& /*extra*/) {
+Cleaner::properties Cleaner::get_properties([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     return { .position_reporting = false };
 }
 
-Cleaner::power_status Cleaner::get_power_status(const viam::sdk::ProtoStruct& /*extra*/) {
+Cleaner::power_status Cleaner::get_power_status([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     const double p = current_power_.load();
     return { .is_on = (p != 0.0), .power_pct = p };
 }
@@ -180,15 +164,15 @@ viam::sdk::ProtoStruct Cleaner::get_status() {
     return {};
 }
 
-viam::sdk::ProtoStruct Cleaner::do_command(const viam::sdk::ProtoStruct& /*command*/) {
+viam::sdk::ProtoStruct Cleaner::do_command([[maybe_unused]] const viam::sdk::ProtoStruct& command) {
     throw std::runtime_error("do_command not implemented");
 }
 
-std::vector<viam::sdk::GeometryConfig> Cleaner::get_geometries(const viam::sdk::ProtoStruct& /*extra*/) {
+std::vector<viam::sdk::GeometryConfig> Cleaner::get_geometries([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     return {};
 }
 
-void Cleaner::stop(const viam::sdk::ProtoStruct& /*extra*/) {
+void Cleaner::stop([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     std::lock_guard<std::mutex> lock(mutex_);
     motor_->set_value(0.0);
     current_power_.store(0.0);

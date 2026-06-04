@@ -1,4 +1,5 @@
 #include "base.hpp"
+#include "gpio_util.hpp"
 
 #include <lgpio.h>
 
@@ -6,6 +7,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <expected>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -48,23 +50,14 @@ class Motor {
 public:
     Motor(int handle, int forward, int backward, int enable)
         : handle_(handle), fwd_(forward), bwd_(backward), en_(enable) {
-        auto claim = [&](int pin, const char* name) {
-            int rc = lgGpioClaimOutput(handle_, 0, pin, 0);
-            if (rc < 0) {
-                throw std::runtime_error(
-                    std::string("lgGpioClaimOutput ") + name + " pin=" + std::to_string(pin) +
-                    " rc=" + std::to_string(rc));
-            }
-        };
-        try {
-            claim(fwd_, "fwd");
-            claim(bwd_, "bwd");
-            claim(en_,  "en");
-        } catch (...) {
+        auto result = gpio_util::claim_output(handle_, fwd_, "fwd")
+            .and_then([&] { return gpio_util::claim_output(handle_, bwd_, "bwd"); })
+            .and_then([&] { return gpio_util::claim_output(handle_, en_,  "en"); });
+        if (!result) {
             lgGpioFree(handle_, fwd_);
             lgGpioFree(handle_, bwd_);
             lgGpioFree(handle_, en_);
-            throw;
+            throw std::runtime_error(std::move(result).error());
         }
     }
 
@@ -82,21 +75,12 @@ public:
 
     void set_value(double value) {
         value = clamp(value, -1.0, 1.0);
-        double duty = std::abs(value) * 100.0;
-
-        if (value == 0.0) {
-            lgTxPwm(handle_, fwd_, kPwmFrequencyHz, 0.0, 0, 0);
-            lgTxPwm(handle_, bwd_, kPwmFrequencyHz, 0.0, 0, 0);
-            lgGpioWrite(handle_, en_, 0);
-        } else if (value > 0.0) {
-            lgGpioWrite(handle_, en_, 1);
-            lgTxPwm(handle_, bwd_, kPwmFrequencyHz, 0.0,  0, 0);
-            lgTxPwm(handle_, fwd_, kPwmFrequencyHz, duty, 0, 0);
-        } else {
-            lgGpioWrite(handle_, en_, 1);
-            lgTxPwm(handle_, fwd_, kPwmFrequencyHz, 0.0,  0, 0);
-            lgTxPwm(handle_, bwd_, kPwmFrequencyHz, duty, 0, 0);
-        }
+        double fwd_duty = value * (value > 0.0) * 100.0;
+        double bwd_duty = -value * (value < 0.0) * 100.0;
+        int enable = (value != 0.0);
+        lgGpioWrite(handle_, en_, enable);
+        lgTxPwm(handle_, fwd_, kPwmFrequencyHz, fwd_duty, 0, 0);
+        lgTxPwm(handle_, bwd_, kPwmFrequencyHz, bwd_duty, 0, 0);
     }
 
 private:
@@ -104,20 +88,18 @@ private:
     int fwd_, bwd_, en_;
 };
 
-Base::Base(const viam::sdk::Dependencies& /*deps*/, const viam::sdk::ResourceConfig& cfg)
+Base::Base([[maybe_unused]] const viam::sdk::Dependencies& deps, const viam::sdk::ResourceConfig& cfg)
     : viam::sdk::Base(cfg.name()) {
-    chip_handle_ = lgGpiochipOpen(kGpioChip);
-    if (chip_handle_ < 0) {
-        throw std::runtime_error(
-            "lgGpiochipOpen(" + std::to_string(kGpioChip) + ") rc=" + std::to_string(chip_handle_));
-    }
+    auto h = gpio_util::open_chip(kGpioChip);
+    if (!h) [[unlikely]] throw std::runtime_error(std::move(h).error());
+    chip_handle_ = *h;
 
     try {
-        motor_left_  = std::make_unique<Motor>(chip_handle_, kLeftForward,  kLeftBackward,  kLeftEnable);
-        motor_right_ = std::make_unique<Motor>(chip_handle_, kRightForward, kRightBackward, kRightEnable);
+        motor_left_  = std::make_unique<Motor>(*chip_handle_, kLeftForward,  kLeftBackward,  kLeftEnable);
+        motor_right_ = std::make_unique<Motor>(*chip_handle_, kRightForward, kRightBackward, kRightEnable);
     } catch (...) {
-        lgGpiochipClose(chip_handle_);
-        chip_handle_ = -1;
+        lgGpiochipClose(*chip_handle_);
+        chip_handle_.reset();
         throw;
     }
 
@@ -127,8 +109,8 @@ Base::Base(const viam::sdk::Dependencies& /*deps*/, const viam::sdk::ResourceCon
 Base::~Base() {
     motor_left_.reset();
     motor_right_.reset();
-    if (chip_handle_ >= 0) {
-        lgGpiochipClose(chip_handle_);
+    if (chip_handle_) {
+        lgGpiochipClose(*chip_handle_);
     }
 }
 
@@ -140,7 +122,7 @@ void Base::reconfigure(const viam::sdk::ResourceConfig& cfg) {
     max_spin_deg_s_         = attr_double(attrs, "max_spin_deg_s",         kDefaultMaxSpinDegS);
 }
 
-std::vector<std::string> Base::validate(const viam::sdk::ResourceConfig& /*cfg*/) {
+std::vector<std::string> Base::validate([[maybe_unused]] const viam::sdk::ResourceConfig& cfg) {
     return {};
 }
 
@@ -151,17 +133,17 @@ void Base::set_motors(double left, double right) {
     moving_.store(left != 0.0 || right != 0.0);
 }
 
-void Base::stop(const viam::sdk::ProtoStruct& /*extra*/) {
+void Base::stop([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     set_motors(0.0, 0.0);
 }
 
-void Base::move_straight(int64_t distance_mm, double mm_per_sec, const viam::sdk::ProtoStruct& /*extra*/) {
+void Base::move_straight(int64_t distance_mm, double mm_per_sec, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     if (distance_mm == 0 || mm_per_sec == 0.0) {
         set_motors(0.0, 0.0);
         return;
     }
     double speed = std::abs(mm_per_sec) / max_speed_mm_s_;
-    double power = clamp(distance_mm > 0 ? speed : -speed, -1.0, 1.0);
+    double power = clamp(speed * (2 * (distance_mm > 0) - 1), -1.0, 1.0);
     double duration_s = std::abs(static_cast<double>(distance_mm) / mm_per_sec);
 
     set_motors(power, power);
@@ -169,7 +151,7 @@ void Base::move_straight(int64_t distance_mm, double mm_per_sec, const viam::sdk
     set_motors(0.0, 0.0);
 }
 
-void Base::spin(double angle_deg, double degs_per_sec, const viam::sdk::ProtoStruct& /*extra*/) {
+void Base::spin(double angle_deg, double degs_per_sec, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     if (angle_deg == 0.0 || degs_per_sec == 0.0) {
         set_motors(0.0, 0.0);
         return;
@@ -177,22 +159,19 @@ void Base::spin(double angle_deg, double degs_per_sec, const viam::sdk::ProtoStr
     double power = clamp(std::abs(degs_per_sec) / max_spin_deg_s_, 0.0, 1.0);
     double duration_s = std::abs(angle_deg / degs_per_sec);
 
-    if (angle_deg > 0.0) {
-        set_motors(-power, power);
-    } else {
-        set_motors(power, -power);
-    }
+    double signed_power = power * (2 * (angle_deg > 0.0) - 1);
+    set_motors(-signed_power, signed_power);
     std::this_thread::sleep_for(std::chrono::duration<double>(duration_s));
     set_motors(0.0, 0.0);
 }
 
-void Base::set_power(const viam::sdk::Vector3& linear, const viam::sdk::Vector3& angular, const viam::sdk::ProtoStruct& /*extra*/) {
+void Base::set_power(const viam::sdk::Vector3& linear, const viam::sdk::Vector3& angular, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     set_motors(
         clamp(linear.y() - angular.z(), -1.0, 1.0),
         clamp(linear.y() + angular.z(), -1.0, 1.0));
 }
 
-void Base::set_velocity(const viam::sdk::Vector3& linear, const viam::sdk::Vector3& angular, const viam::sdk::ProtoStruct& /*extra*/) {
+void Base::set_velocity(const viam::sdk::Vector3& linear, const viam::sdk::Vector3& angular, [[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     double omega = angular.z() * M_PI / 180.0;
     double half_width = width_mm_ / 2.0;
     set_motors(
@@ -208,7 +187,7 @@ viam::sdk::ProtoStruct Base::get_status() {
     return {};
 }
 
-viam::sdk::Base::properties Base::get_properties(const viam::sdk::ProtoStruct& /*extra*/) {
+viam::sdk::Base::properties Base::get_properties([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     viam::sdk::Base::properties p{};
     p.width_meters               = width_mm_ / 1000.0;
     p.turning_radius_meters      = 0.0;
@@ -216,11 +195,11 @@ viam::sdk::Base::properties Base::get_properties(const viam::sdk::ProtoStruct& /
     return p;
 }
 
-viam::sdk::ProtoStruct Base::do_command(const viam::sdk::ProtoStruct& /*command*/) {
+viam::sdk::ProtoStruct Base::do_command([[maybe_unused]] const viam::sdk::ProtoStruct& command) {
     throw std::runtime_error("do_command not implemented");
 }
 
-std::vector<viam::sdk::GeometryConfig> Base::get_geometries(const viam::sdk::ProtoStruct& /*extra*/) {
+std::vector<viam::sdk::GeometryConfig> Base::get_geometries([[maybe_unused]] const viam::sdk::ProtoStruct& extra) {
     return {};
 }
 

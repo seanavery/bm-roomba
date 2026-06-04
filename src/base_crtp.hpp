@@ -1,5 +1,7 @@
 #pragma once
 
+#include "gpio_util.hpp"
+
 #include <lgpio.h>
 
 #include <algorithm>
@@ -7,8 +9,10 @@
 #include <cmath>
 #include <concepts>
 #include <cstdint>
+#include <expected>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -38,9 +42,12 @@ template <int FwdPin, int BwdPin, int EnPin, int PwmHz = 100>
 class L298NMotor : public MotorBase<L298NMotor<FwdPin, BwdPin, EnPin, PwmHz>> {
 public:
     explicit L298NMotor(int chip_handle) : handle_(chip_handle) {
-        claim(FwdPin, "fwd");
-        claim(BwdPin, "bwd");
-        claim(EnPin,  "en");
+        auto result = gpio_util::claim_output(handle_, FwdPin, "fwd")
+            .and_then([&] { return gpio_util::claim_output(handle_, BwdPin, "bwd"); })
+            .and_then([&] { return gpio_util::claim_output(handle_, EnPin,  "en"); });
+        if (!result) {
+            throw std::runtime_error(std::move(result).error());
+        }
     }
 
     ~L298NMotor() {
@@ -56,34 +63,16 @@ public:
     L298NMotor& operator=(const L298NMotor&) = delete;
 
     void do_set(double v) {
-        const double duty = std::abs(v) * 100.0;
-        if (v == 0.0) {
-            lgTxPwm(handle_, FwdPin, PwmHz, 0.0, 0, 0);
-            lgTxPwm(handle_, BwdPin, PwmHz, 0.0, 0, 0);
-            lgGpioWrite(handle_, EnPin, 0);
-        } else if (v > 0.0) {
-            lgGpioWrite(handle_, EnPin, 1);
-            lgTxPwm(handle_, BwdPin, PwmHz, 0.0,  0, 0);
-            lgTxPwm(handle_, FwdPin, PwmHz, duty, 0, 0);
-        } else {
-            lgGpioWrite(handle_, EnPin, 1);
-            lgTxPwm(handle_, FwdPin, PwmHz, 0.0,  0, 0);
-            lgTxPwm(handle_, BwdPin, PwmHz, duty, 0, 0);
-        }
+        double fwd_duty = v * (v > 0.0) * 100.0;
+        double bwd_duty = -v * (v < 0.0) * 100.0;
+        int enable = (v != 0.0);
+        lgGpioWrite(handle_, EnPin, enable);
+        lgTxPwm(handle_, FwdPin, PwmHz, fwd_duty, 0, 0);
+        lgTxPwm(handle_, BwdPin, PwmHz, bwd_duty, 0, 0);
     }
 
 private:
     int handle_;
-
-    void claim(int pin, const char* name) {
-        int rc = lgGpioClaimOutput(handle_, 0, pin, 0);
-        if (rc < 0) {
-            throw std::runtime_error(
-                std::string("lgGpioClaimOutput ") + name +
-                " pin=" + std::to_string(pin) +
-                " rc=" + std::to_string(rc));
-        }
-    }
 };
 
 struct DiffDriveSpec {
@@ -172,7 +161,7 @@ public:
     std::vector<viam::sdk::GeometryConfig> get_geometries(const viam::sdk::ProtoStruct& extra) override;
 
 private:
-    int chip_handle_ = -1;
+    std::optional<int> chip_handle_;
     std::unique_ptr<RoombaBase> drive_;
     std::mutex drive_mutex_;
     std::atomic<bool> moving_{false};

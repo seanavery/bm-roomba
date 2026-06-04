@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 #include <viam/sdk/common/proto_value.hpp>
@@ -58,7 +59,7 @@ private:
     void set_motors(double left, double right);
     void reconfigure(const viam::sdk::ResourceConfig& cfg);
 
-    int chip_handle_ = -1;
+    std::optional<int> chip_handle_;
     std::unique_ptr<Motor> motor_left_;
     std::unique_ptr<Motor> motor_right_;
 
